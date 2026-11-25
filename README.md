@@ -24,7 +24,7 @@ If the plugin can't see a real path for a dropped item, for example an image dra
 
 - Desktop only. On mobile there are no file paths to link to.
 - A `file:///` link only works on computers where the file is at the same path. Links to files on a shared drive or in a synced folder like OneDrive work on every computer that has the same path.
-- The plugin reads nothing and sends nothing. It only turns the dropped file's path into a link.
+- The plugin makes no network requests. A plain drop only turns the file's path into a link; a Ctrl or Option drop reads the file to copy it into the vault.
 
 ## Installing manually
 
