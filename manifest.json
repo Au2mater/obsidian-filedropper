@@ -1,7 +1,7 @@
 {
   "id": "file-dropper",
   "name": "File Dropper",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.5.7",
   "description": "Drop a file from your computer into a note to insert a clickable link to where it lives, instead of copying it into the vault.",
   "author": "Au2mater",

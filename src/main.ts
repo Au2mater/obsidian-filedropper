@@ -43,12 +43,21 @@ export default class FileDropperPlugin extends Plugin {
     for (const file of files) {
       try {
         const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, sourcePath);
+        if (isHidden(path)) throw new HiddenFolderError(path);
         const created = await this.app.vault.createBinary(path, await file.arrayBuffer());
         const link = this.app.fileManager.generateMarkdownLink(created, sourcePath);
         // Like Obsidian's own drop: embed what Obsidian can show inline, link the rest.
         links.push(EMBEDDABLE.test(created.extension) ? "!" + link : link);
       } catch (e) {
-        new Notice(`File Dropper: could not copy ${file.name} into the vault: ${e instanceof Error ? e.message : String(e)}`);
+        const message = e instanceof Error ? e.message : String(e);
+        // Obsidian does not index folders whose name starts with a dot. Saving into one either fails
+        // with "Folder already exists" or gives a link Obsidian cannot resolve.
+        const hint =
+          e instanceof HiddenFolderError || /folder already exists/i.test(message)
+            ? " Your attachment folder looks hidden (its name starts with a dot). Pick a folder name without a leading dot under Settings → Files and links."
+            : "";
+        new Notice(`File Dropper: could not copy ${file.name} into the vault: ${message}.${hint}`, hint ? 15000 : undefined);
+        break;
       }
     }
     return links;
@@ -86,6 +95,16 @@ function getNativePath(file: File): string | null {
   }
   const legacy = (file as File & { path?: string }).path;
   return legacy || null;
+}
+
+class HiddenFolderError extends Error {
+  constructor(path: string) {
+    super(`"${path}" is inside a hidden folder`);
+  }
+}
+
+function isHidden(vaultPath: string): boolean {
+  return vaultPath.split("/").slice(0, -1).some((part) => part.startsWith("."));
 }
 
 const EMBEDDABLE = /^(avif|bmp|gif|jpe?g|png|svg|webp|mp3|webm|wav|m4a|ogg|3gp|flac|mp4|ogv|mov|mkv|pdf)$/i;
