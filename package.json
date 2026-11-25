@@ -1,6 +1,6 @@
 {
   "name": "obsidian-filedropper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Obsidian plugin: drop a file to insert a clickable link to it instead of copying it into the vault",
   "main": "main.js",
   "scripts": {

@@ -1,11 +1,13 @@
-import { Editor, FileSystemAdapter, MarkdownFileInfo, MarkdownView, Platform, Plugin, TFile, normalizePath } from "obsidian";
+import { webUtils } from "electron";
+import { Editor, FileSystemAdapter, EditorPosition, MarkdownFileInfo, MarkdownView, Notice, Platform, Plugin, TFile, normalizePath } from "obsidian";
 
 /**
  * Drop a file from outside Obsidian into a note and get a clickable link to the file where it
  * already lives, instead of Obsidian copying it into the vault as an attachment.
  *
- * Hold Ctrl (Option on macOS) while dropping to get Obsidian's normal behaviour (copy into the
- * vault). That is the "copy" modifier in Explorer and Finder too; Shift would mean "move" there.
+ * Hold Ctrl (Option on macOS) while dropping to copy the file into the vault's attachment folder
+ * instead. That is the "copy" modifier in Explorer and Finder too; Shift would mean "move" there.
+ * The plugin does the copy itself, because Obsidian's own Ctrl/Option drop inserts a file:// link.
  */
 export default class FileDropperPlugin extends Plugin {
   onload() {
@@ -13,9 +15,17 @@ export default class FileDropperPlugin extends Plugin {
   }
 
   private onDrop(evt: DragEvent, editor: Editor, info: MarkdownView | MarkdownFileInfo) {
-    if (evt.defaultPrevented || (Platform.isMacOS ? evt.altKey : evt.ctrlKey)) return;
+    if (evt.defaultPrevented) return;
     const files = Array.from(evt.dataTransfer?.files ?? []);
     if (files.length === 0) return;
+    const sourcePath = info.file?.path ?? "";
+
+    if (Platform.isMacOS ? evt.altKey : evt.ctrlKey) {
+      evt.preventDefault();
+      const pos = dropPosition(editor, evt);
+      void this.copyIntoVault(files, sourcePath).then((links) => insertAt(editor, pos, links));
+      return;
+    }
 
     const paths = files.map(getNativePath);
     // If we cannot see a real path for every file (e.g. dragged out of a browser or an email),
@@ -23,16 +33,25 @@ export default class FileDropperPlugin extends Plugin {
     if (paths.some((p) => !p)) return;
 
     evt.preventDefault();
-
-    const sourcePath = info.file?.path ?? "";
     const links = (paths as string[]).map((p) => this.linkFor(p, sourcePath));
-    const text = links.join(links.length > 1 ? "\n" : "");
+    insertAt(editor, dropPosition(editor, evt), links);
+  }
 
-    // Put the cursor where the file was dropped, then insert there.
-    const cm = (editor as unknown as { cm?: { posAtCoords(c: { x: number; y: number }): number | null } }).cm;
-    const offset = cm?.posAtCoords({ x: evt.clientX, y: evt.clientY });
-    if (offset != null) editor.setCursor(editor.offsetToPos(offset));
-    editor.replaceSelection(text);
+  /** Copy dropped files into the attachment folder, as Obsidian's plain drop would. */
+  private async copyIntoVault(files: File[], sourcePath: string): Promise<string[]> {
+    const links: string[] = [];
+    for (const file of files) {
+      try {
+        const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, sourcePath);
+        const created = await this.app.vault.createBinary(path, await file.arrayBuffer());
+        const link = this.app.fileManager.generateMarkdownLink(created, sourcePath);
+        // Like Obsidian's own drop: embed what Obsidian can show inline, link the rest.
+        links.push(EMBEDDABLE.test(created.extension) ? "!" + link : link);
+      } catch (e) {
+        new Notice(`File Dropper: could not copy ${file.name} into the vault: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    return links;
   }
 
   /** A vault-internal file gets a normal Obsidian link; anything else gets a file:/// link. */
@@ -60,14 +79,28 @@ export default class FileDropperPlugin extends Plugin {
 /** Real filesystem path of a dropped File. Electron 32+ removed File.path; use webUtils instead. */
 function getNativePath(file: File): string | null {
   try {
-    const electron = require("electron") as { webUtils?: { getPathForFile(f: File): string } };
-    const p = electron.webUtils?.getPathForFile(file);
+    const p = webUtils?.getPathForFile(file);
     if (p) return p;
   } catch {
     // fall through
   }
   const legacy = (file as File & { path?: string }).path;
   return legacy || null;
+}
+
+const EMBEDDABLE = /^(avif|bmp|gif|jpe?g|png|svg|webp|mp3|webm|wav|m4a|ogg|3gp|flac|mp4|ogv|mov|mkv|pdf)$/i;
+
+/** Editor position under the mouse, or null to use the cursor. */
+function dropPosition(editor: Editor, evt: DragEvent): EditorPosition | null {
+  const cm = (editor as unknown as { cm?: { posAtCoords(c: { x: number; y: number }): number | null } }).cm;
+  const offset = cm?.posAtCoords({ x: evt.clientX, y: evt.clientY });
+  return offset != null ? editor.offsetToPos(offset) : null;
+}
+
+function insertAt(editor: Editor, pos: EditorPosition | null, links: string[]) {
+  if (links.length === 0) return;
+  if (pos) editor.setCursor(pos);
+  editor.replaceSelection(links.join("\n"));
 }
 
 function basename(p: string): string {

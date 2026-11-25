@@ -14,7 +14,9 @@ The link goes where you drop it. Spaces and parentheses in the path stay readabl
 
 ## Copying into the vault anyway
 
-Hold **Ctrl** (**Option** on macOS) while dropping to get Obsidian's normal behaviour, which copies the file into your attachment folder. That is also the "copy" key in Explorer and Finder.
+Hold **Ctrl** (**Option** on macOS) while dropping to copy the file into your attachment folder instead, as Obsidian does without the plugin. Images, audio, video and PDFs are embedded; other files are linked. Ctrl and Option are also the "copy" keys in Explorer and Finder.
+
+If your attachment folder starts with a dot (for example `.attachments`), Obsidian hides it and can't save attachments there, so the copy fails with "Folder already exists". Pick a folder name without a leading dot under Settings → Files and links.
 
 If the plugin can't see a real path for a dropped item, for example an image dragged from a browser or an attachment dragged from an email, it leaves the drop to Obsidian.
 
